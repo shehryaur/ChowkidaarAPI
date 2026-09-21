@@ -244,3 +244,6 @@ This project was built for a hackathon, but the core product loop is already in 
 ## Credits
 
 The schema inference and diffing in `backend/app/schema/` are based on ideas from [`@schema-watch/core`](https://github.com/HenryMorganDibie/schema-watch) and `api-schema-differentiator`. The graph pipeline uses Graphify and ast-grep. See [backend/NOTICE](backend/NOTICE).
+
+See the Demo Video:
+[![Chowkidaar: Autonomous API Reliability](https://repoclip.io/api/badge/3b3f2e45-ce5d-4522-ab96-eb7642b48866)](https://repoclip.io/v/3b3f2e45-ce5d-4522-ab96-eb7642b48866)
