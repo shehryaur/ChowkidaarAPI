@@ -1,8 +1,68 @@
 # Chowkidaar
 
-**AI maintenance for projects that depend on external APIs.**
+**An autonomous API reliability layer for projects that depend on external services.**
 
-Chowkidaar, meaning "watchman," watches the APIs your code depends on, maps the exact code paths they touch, detects drift or pressure, writes a focused fix, runs your checks, and opens a pull request for review. It never merges for you.
+Chowkidaar, meaning "watchman," turns API maintenance into an always-on agent. It watches the APIs your code depends on, maps the exact code paths they touch, detects drift or pressure before users feel it, writes a focused fix, runs your checks, and opens a pull request for review. It never merges for you.
+
+## System Graph
+
+```mermaid
+flowchart LR
+    subgraph Signals["Signals Chowkidaar Watches"]
+        A["API contract drift"]
+        B["Provider release notes"]
+        C["Environment changes"]
+        D["Live traffic pressure"]
+        E["Simulation results"]
+    end
+
+    subgraph Intelligence["Repository Intelligence"]
+        F["API call-site scanner"]
+        G["Graphify dependency graph"]
+        H["Pipeline slice<br/>provider -> callers -> dependents"]
+        I["Secret-safe env fingerprints"]
+        J["Traffic + queueing model"]
+    end
+
+    subgraph Agent["Autonomous Repair Agent"]
+        K["Root-cause audit"]
+        L["Blast-radius trace"]
+        M["Targeted code patch"]
+        N["Project checks<br/>tests + types + build"]
+        O["Pull request with evidence"]
+    end
+
+    subgraph Human["Developer Control"]
+        P["Review PR"]
+        Q["Request changes"]
+        R["Merge when ready"]
+    end
+
+    A --> F
+    B --> K
+    C --> I
+    D --> J
+    E --> J
+    F --> G --> H --> L
+    I --> K
+    J --> K
+    K --> L --> M --> N --> O --> P
+    P --> Q --> M
+    P --> R
+```
+
+```text
+External API changes before your code breaks
+              |
+              v
+Chowkidaar narrows the repo to the exact affected pipeline
+              |
+              v
+Agent writes the smallest safe patch and proves it with your checks
+              |
+              v
+You review a PR instead of debugging a production surprise
+```
 
 ## Why It Matters
 
@@ -16,13 +76,13 @@ API integrations usually break after a provider changes something and a develope
 
 ## Core Features
 
-- **Repository graph**: maps external API usage into a visual dependency graph.
+- **Repository graph**: maps external API usage into a visual dependency graph so the agent does not wander through the whole codebase.
 - **Local and GitHub connect flow**: connect by GitHub repo link or by choosing a local folder.
-- **Smart simulation**: runs a what-if traffic simulation across the graph and scores weak points.
-- **Live audit**: checks whether current or simulated traffic needs action.
-- **Apply workflow**: writes a recommended fix, runs checks, and opens a PR-style review flow.
+- **Smart simulation**: runs a what-if traffic simulation across the graph, scores weak points, and recommends a concrete fix.
+- **Live audit**: checks whether current or simulated traffic needs action before it becomes an incident.
+- **Apply workflow**: writes a recommended fix, runs checks, and opens the PR review flow immediately.
 - **Secret-safe environment sensing**: fingerprints credentials locally instead of storing raw values.
-- **Review loop**: designed so review comments can become follow-up work on the same branch.
+- **Review loop**: designed so review comments become follow-up work on the same branch.
 
 ## How It Works
 
@@ -179,7 +239,7 @@ npx tsc --noEmit
 
 ## Current Status
 
-This project was built for a hackathon. The core flows are implemented: repo connection, graph mapping, simulation, audit, focused repair flow, validation, and PR-ready UI. Real GitHub PR creation requires a configured GitHub token and a connected remote repository.
+This project was built for a hackathon, but the core product loop is already in place: repo connection, graph mapping, simulation, audit, focused repair flow, validation, and PR-ready UI. Real GitHub PR creation requires a configured GitHub token and a connected remote repository.
 
 ## Credits
 
