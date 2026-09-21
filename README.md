@@ -1,5 +1,8 @@
 # Chowkidaar
 
+See the Demo Video:
+[![Chowkidaar: Autonomous API Reliability](https://repoclip.io/api/badge/3b3f2e45-ce5d-4522-ab96-eb7642b48866)](https://repoclip.io/v/3b3f2e45-ce5d-4522-ab96-eb7642b48866)
+
 **An autonomous API reliability layer for projects that depend on external services.**
 
 Chowkidaar, meaning "watchman," turns API maintenance into an always-on agent. It watches the APIs your code depends on, maps the exact code paths they touch, detects drift or pressure before users feel it, writes a focused fix, runs your checks, and opens a pull request for review. It never merges for you.
@@ -245,5 +248,4 @@ This project was built for a hackathon, but the core product loop is already in 
 
 The schema inference and diffing in `backend/app/schema/` are based on ideas from [`@schema-watch/core`](https://github.com/HenryMorganDibie/schema-watch) and `api-schema-differentiator`. The graph pipeline uses Graphify and ast-grep. See [backend/NOTICE](backend/NOTICE).
 
-See the Demo Video:
-[![Chowkidaar: Autonomous API Reliability](https://repoclip.io/api/badge/3b3f2e45-ce5d-4522-ab96-eb7642b48866)](https://repoclip.io/v/3b3f2e45-ce5d-4522-ab96-eb7642b48866)
+
