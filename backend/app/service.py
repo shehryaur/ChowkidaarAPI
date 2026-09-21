@@ -50,12 +50,12 @@ def connect_repo(*, local_path: str | None = None, full_name: str | None = None,
 
     `env` is a snapshot pushed by the connector (fingerprints computed on the user's machine).
     With `background=True` the mapping runs as the repository agent's first task and this returns at once."""
+    full_name = gitops.normalize_full_name(full_name)
     if local_path:
         root = Path(local_path).expanduser().resolve()
         if not (root / ".git").exists():
-            if not full_name:
-                raise ValueError(f"{root} is not a git repository")
-            root = gitops.clone_from_github(full_name)  # the connector ran on another machine: work from a clone
+            if full_name:
+                root = gitops.clone_from_github(full_name)  # the connector ran on another machine: work from a clone
     elif full_name:
         root = gitops.clone_from_github(full_name)
     else:

@@ -345,7 +345,10 @@ function Simulation() {
                 <span className="chip mono">capacity +{rec.gain!.capacity_pct}%</span>
                 <span className="chip mono">simulated</span>
               </span>
-              <button className="btn btn-go" disabled={!!busy} onClick={() => run("apply", () => api.startReview(projectId, rec.nodeId, rec.prefer))}>
+              <button className="btn btn-go" disabled={!!busy} onClick={() => run("apply", async () => {
+                const { migration_id } = await api.startReview(projectId, rec.nodeId, rec.prefer);
+                await replayRun(migration_id);
+              })}>
                 {busy === "apply" ? <Spinner /> : <Icon.check />} Apply: write it, run the checks, open a PR
               </button>
             </div>
@@ -387,7 +390,10 @@ function TrafficControls() {
             <span className="chip mono">capacity +{sg.gain.capacity_pct}%</span>
             <span className="chip mono">simulated</span>
           </span>
-          <button className="btn btn-go" disabled={!!busy} onClick={() => run(`sg:${sg.nodeId}`, () => api.startReview(projectId, sg.nodeId, sg.prefer))}>
+          <button className="btn btn-go" disabled={!!busy} onClick={() => run(`sg:${sg.nodeId}`, async () => {
+            const { migration_id } = await api.startReview(projectId, sg.nodeId, sg.prefer);
+            await replayRun(migration_id);
+          })}>
             {busy === `sg:${sg.nodeId}` ? <Spinner /> : <Icon.check />} Apply: write it, run the checks, open a PR
           </button>
         </div>
@@ -400,7 +406,11 @@ function TrafficControls() {
           {r.before && r.after && <span className="chips"><span className="chip mono">p95 {seconds(r.before.p95_ms)} → {seconds(r.after.p95_ms)}</span><span className="chip mono">simulated</span></span>}
           <div className="confirm-actions">
             <button className="btn" onClick={() => useStore.getState().dropRecommendation(r.id)}>Not now</button>
-            <button className="btn btn-go" disabled={!!busy} onClick={() => run("apply", async () => { await api.startReview(projectId, r.nodeId, r.prefer); useStore.getState().dropRecommendation(r.id); })}>
+            <button className="btn btn-go" disabled={!!busy} onClick={() => run("apply", async () => {
+              const { migration_id } = await api.startReview(projectId, r.nodeId, r.prefer);
+              useStore.getState().dropRecommendation(r.id);
+              await replayRun(migration_id);
+            })}>
               {busy === "apply" ? <Spinner /> : <Icon.check />} Apply and open a PR
             </button>
           </div>

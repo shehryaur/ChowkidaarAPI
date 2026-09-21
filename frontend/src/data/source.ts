@@ -91,8 +91,8 @@ export async function refresh(): Promise<void> {
   if (useStore.getState().projectId !== projectId) return;
   if (simulation) useStore.getState().setSimReport(simulation.report, simulation.running);
   useStore.getState().setLastRun(migrations[0] ?? null);
-  // The stream sends traffic every second while there is any; this only clears it when it stops.
-  if (!traffic || traffic.source === "none") useStore.getState().setTraffic(projectId, null);
+  // The stream sends traffic every second while there is any; polling fills it after actions and clears it when it stops.
+  useStore.getState().setTraffic(projectId, traffic && traffic.source !== "none" ? traffic : null);
 }
 
 export async function replayRun(migrationId: string): Promise<void> {

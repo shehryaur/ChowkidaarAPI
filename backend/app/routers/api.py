@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Query, Request
@@ -84,6 +85,10 @@ class ConnectRepo(BaseModel):
     background: bool = False      # true: return at once and let the repository's agent map it (what the UI does)
 
 
+class ResolveLocalFolder(BaseModel):
+    name: str
+
+
 @router.post("/repos", status_code=201)
 def connect_repo(body: ConnectRepo):
     try:
@@ -91,6 +96,45 @@ def connect_repo(body: ConnectRepo):
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return repo | {"integrations": [_integration_card(i) for i in db.select("integrations", {"repo_id": repo["id"]}, order="name ASC")]}
+
+
+@router.post("/repos/resolve-local-folder")
+def resolve_local_folder(body: ResolveLocalFolder):
+    name = Path(body.name).name
+    if not name or name in {".", ".."}:
+        raise HTTPException(status_code=400, detail="Choose a folder first.")
+    roots = [Path.home() / "Desktop", Path.home() / "Documents", Path.cwd()]
+    matches = []
+    for root in roots:
+        candidate = root / name
+        if candidate.is_dir():
+            matches.append(candidate.resolve())
+    unique = sorted({str(p) for p in matches})
+    if len(unique) == 1:
+        return {"path": unique[0]}
+    if len(unique) > 1:
+        raise HTTPException(status_code=400, detail=f"Found more than one folder named {name}. Paste the full path.")
+    raise HTTPException(status_code=404, detail=f"Could not find {name} on Desktop or Documents. Paste the full path.")
+
+
+@router.post("/repos/pick-local")
+def pick_local_repo():
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="This computer cannot open a folder picker.") from exc
+
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    try:
+        path = filedialog.askdirectory(title="Select a local Git repository")
+    finally:
+        root.destroy()
+    if not path:
+        return {"path": None}
+    return {"path": path}
 
 
 @router.get("/repos")

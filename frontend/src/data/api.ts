@@ -108,13 +108,25 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
 const post = <T,>(path: string, body?: unknown) => call<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
 
+function githubFullName(input: string): string | null {
+  const value = input.trim();
+  const direct = value.match(/^([\w.-]+)\/([\w.-]+)$/);
+  if (direct) return `${direct[1]}/${direct[2].replace(/\.git$/, "")}`;
+  const url = value.match(/^https?:\/\/(?:www\.)?github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i);
+  return url ? `${url[1]}/${url[2]}` : null;
+}
+
 export const api = {
   dashboard: () => call<Dashboard>("/dashboard"),
   onboard: (name: string) => post<Workspace>("/onboarding", { name }),
   rotateKey: () => post<Workspace>("/workspace/rotate-key"),
-  connectRepo: (target: string) =>
-    // "owner/repo" clones from GitHub; anything else is a path on the machine the backend runs on.
-    post<Repo>("/repos", /^[\w.-]+\/[\w.-]+$/.test(target) ? { full_name: target, background: true } : { local_path: target, background: true }),
+  connectRepo: (target: string, source?: "github" | "local") => {
+    const fullName = githubFullName(target);
+    if (source === "github" || fullName) return post<Repo>("/repos", { full_name: fullName ?? target.trim(), background: true });
+    return post<Repo>("/repos", { local_path: target.trim(), background: true });
+  },
+  resolveLocalFolder: (name: string) => post<{ path: string }>("/repos/resolve-local-folder", { name }),
+  pickLocalRepo: () => post<{ path: string | null }>("/repos/pick-local"),
   disconnectRepo: (id: string) => call<void>(`/repos/${id}`, { method: "DELETE" }),
   env: async (repoId: string) => (await call<{ variables: EnvVariable[] }>(`/repos/${repoId}/env`)).variables,
   /** "facts" answers at once from the code graph; "ai" has the model word it (seconds) unless it already did. */

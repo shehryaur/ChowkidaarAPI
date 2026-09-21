@@ -1,196 +1,186 @@
 # Chowkidaar
 
-**APIs that maintain their own integrations.**
+**AI maintenance for projects that depend on external APIs.**
 
-*Chowkidaar* means watchman. It stands between a codebase and every external API it depends on
-(OpenAI, Stripe, Supabase, Clerk, Twilio, ...). One private AI agent per repository watches that
-repository's API pipelines, acts when it is safe, asks when it is not, and opens tested pull requests.
-It never merges.
+Chowkidaar, meaning "watchman," watches the APIs your code depends on, maps the exact code paths they touch, detects drift or pressure, writes a focused fix, runs your checks, and opens a pull request for review. It never merges for you.
 
-Coding assistants fix an integration after someone notices it broke and asks. Chowkidaar starts from
-the change itself: nobody has to notice, and nobody has to prompt.
+## Why It Matters
 
+API integrations usually break after a provider changes something and a developer notices. Chowkidaar starts earlier:
+
+1. It watches API contracts, environment changes, and traffic pressure.
+2. It builds a focused graph from provider calls to affected files.
+3. It uses the graph to patch only the relevant code.
+4. It validates the patch with the project's own tests, typecheck, and build.
+5. It opens a pull request with the evidence.
+
+## Core Features
+
+- **Repository graph**: maps external API usage into a visual dependency graph.
+- **Local and GitHub connect flow**: connect by GitHub repo link or by choosing a local folder.
+- **Smart simulation**: runs a what-if traffic simulation across the graph and scores weak points.
+- **Live audit**: checks whether current or simulated traffic needs action.
+- **Apply workflow**: writes a recommended fix, runs checks, and opens a PR-style review flow.
+- **Secret-safe environment sensing**: fingerprints credentials locally instead of storing raw values.
+- **Review loop**: designed so review comments can become follow-up work on the same branch.
+
+## How It Works
+
+```text
+Signals               Graph context              Agent action
+API drift        ->   provider -> callers   ->   write focused patch
+Env changes      ->   callers -> dependents ->   run project checks
+Traffic pressure ->   blast radius only     ->   open pull request
 ```
-        senses                          understands                       acts
-┌──────────────────────┐      ┌──────────────────────────┐      ┌────────────────────────┐
-│ API contract drift   │      │ the API pipeline graph:  │      │ reads the provider docs│
-│ environment changes  │ ───► │ provider → call sites →  │ ───► │ writes the change      │
-│ traffic and pressure │      │ what depends on them     │      │ runs YOUR checks       │
-└──────────────────────┘      └──────────────────────────┘      │ opens the pull request │
-                                                                │ handles review, merge  │
-                                                                └────────────────────────┘
-```
 
-## What it does
+The model does not read the whole repo by default. Chowkidaar narrows the work to the API pipeline first, then gives the agent only the files it needs.
 
-**Connects without seeing your secrets.** Onboarding gives you an API key (shown once; only its hash is
-stored). One command inside your project reports the repository and its credential-like environment
-variables. Each value is reduced on your machine to a keyed hash; only the name and that fingerprint
-are sent.
+## Quick Start
 
-**Maps only what matters.** It finds every API call site (AST search with ast-grep), builds the code
-graph locally (Graphify, tree-sitter, no LLM), and keeps the API pipeline: the provider, the functions
-that call it, and everything that depends on those. On a real 888-node repository the pipeline graph is
-61 nodes. The graph grows on screen from the API outwards. Click any node or connection and the agent
-explains what it does there and what breaks if the API changes.
+Requirements:
 
-**Watches with three senses.**
+- Python 3.12+
+- Node 20.19 or newer
+- uv
+- git
+- Optional: GitHub CLI or `CHOWKIDAAR_GITHUB_TOKEN` for real PR creation
 
-| Sense | How | What happens |
-|---|---|---|
-| API contract drift | Polls live responses, infers the response shape, hashes and diffs it. Reads `Deprecation`, `Sunset` and `Link rel="successor-version"` headers. Accepts provider release webhooks. | Breaking change → migration run |
-| Environment changes | A variable's name says which provider it is; the hash of its value says whether it is the same credential. | Same credential, new name → handled automatically. Different provider (Anthropic → OpenAI) → asks, and waits. A new key of a kind you already use → recommends a better route. |
-| Traffic | Calls per second, p95 and load on every function, drawn as moving dots and load rings. Every 5 minutes the agent silently audits the whole pipeline and writes an audit log. | A node past its budget → pressure review |
-
-**Acts, with your checks as the gate.** The model writes whole files; Chowkidaar runs the project's own
-tests, typecheck and build in a throwaway clone, then opens a GitHub pull request with the evidence.
-If validation fails twice it opens an *investigation* PR that changes no application code.
-
-**Follows through.** Review comments on the PR become another round of work on the same branch
-(comments from deploy and CI bots are ignored). After a merge it re-runs the checks on the base branch
-before marking the integration healthy. GitHub is the record of what was opened: when a project is
-(re)connected, open pull requests on `chowkidaar/*` branches that the database does not know are picked up and
-watched again.
-
-**One agent per repository.** Each has its own context and memory; agents run in parallel and share
-nothing. The "Agents working" panel shows who is busy and who is waiting for you.
-
-## Principles
-
-- **Numbers come from measurement or simulation, never from the model's opinion.** Performance gains in
-  a review are the output of a queueing model (M/M/c) on observed rates, and are labelled *simulated*.
-  There is no invented "confidence: 94%".
-- **Your checks decide.** A check that already fails before the change is reported, not hidden. If
-  nothing can validate a change, no PR is opened.
-- **Secrets stay where they are.** Values are never stored, logged, returned by the API or sent to the
-  model. Real `.env` files never reach the model.
-- **Small blast radius.** The model only sees the files in the affected pipeline, may only write files
-  it was given, and tests are read-only context (except test doubles in a provider switch).
-- **It never merges, and it never touches your checkout.** All work happens in disposable clones under
-  `~/.chowkidaar`.
-
-## Quick start
-
-Requirements: Python 3.12+, [uv](https://docs.astral.sh/uv/), Node 20.19+ (22 recommended), git. Optional: the GitHub CLI
-(`gh`), whose login is used as the GitHub token if you do not set one.
+### Backend
 
 ```bash
-# 1. backend  (http://localhost:8000, API docs at /docs)
 cd backend
-cp .env.example .env          # set OPENAI_KEY and, optionally, NEON_DB
+cp .env.example .env
 uv run uvicorn app.main:app --port 8000
+```
 
-# 2. frontend (http://localhost:5173)
+Backend runs at:
+
+```text
+http://localhost:8000
+```
+
+### Frontend
+
+```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173, create a workspace, and copy the connect command it shows. Run it inside
-the project you want watched:
+Frontend runs at:
+
+```text
+http://localhost:5173
+```
+
+## Connect A Project
+
+From the UI you can connect:
+
+- A GitHub repo, for example `owner/repo` or `https://github.com/owner/repo`
+- A local folder using the **Select folder** button
+- A local path pasted manually
+
+The connector can also run from inside a project:
 
 ```bash
 curl -fsSL http://localhost:8000/api/v1/connector.py | CHOWKIDAAR_API_KEY=ck_live_... python3 - --watch
 ```
 
-The project opens in the UI and its pipeline graph grows in. `--watch` keeps reporting environment
-changes. You can also connect a project from the UI by `owner/repo` or a local path.
+## Demo Flow
 
-### Configuration (`backend/.env`)
+The app includes a demo provider and customer project.
+
+```bash
+uv run --project backend uvicorn main:app --app-dir demo/provider --port 4010
+cd demo/customer-app
+npm install
+```
+
+Then run one of:
+
+```bash
+./demo/run_demo.sh
+./demo/run_demo.sh poll
+./demo/run_env_demo.sh
+```
+
+The demo shows a provider change, graph tracing, patch generation, validation, and PR creation.
+
+## Simulation And Apply
+
+The **Simulation** button runs a peak-load model over the repository graph. It reports:
+
+- predicted load
+- measured simulated load
+- p95 latency
+- failures
+- a 0-100 pipeline score
+- a recommended fix
+
+Pressing **Apply** now opens the full workflow immediately: write the change, run checks, and show the PR review screen.
+
+## Configuration
+
+Main backend environment variables:
 
 | Variable | Purpose |
 |---|---|
-| `OPENAI_KEY` | Writes migrations, addresses PR reviews, words explanations. Without it Chowkidaar still maps, watches and explains from graph facts, and opens investigation PRs instead of code changes. |
-| `NEON_DB` | Postgres connection string. Without it a local SQLite file is used. |
-| `CHOWKIDAAR_GITHUB_TOKEN` | For pushing branches and opening PRs. Falls back to `gh auth token`. |
-| `CHOWKIDAAR_OPEN_PRS` | `false` prepares branches locally and never pushes. |
-| `CHOWKIDAAR_DATA_DIR` | Where working copies, graphs, audit logs and keys live. Default `~/.chowkidaar`. |
-| `CHOWKIDAAR_OPENAI_MODEL` | Default `gpt-5`. |
-| `CHOWKIDAAR_AUDIT_SECONDS` / `_POLL_INTERVAL_SECONDS` / `_PR_WATCH_SECONDS` | Audit (300), contract polling (off; 21600 = 6 h), PR watching (20). |
+| `OPENAI_KEY` | Enables code generation, PR review responses, and AI-written explanations. |
+| `NEON_DB` | Optional Postgres connection. SQLite is used when omitted. |
+| `CHOWKIDAAR_GITHUB_TOKEN` | Pushes branches and opens GitHub pull requests. Falls back to `gh auth token`. |
+| `CHOWKIDAAR_OPEN_PRS` | Set `false` to prepare branches locally without pushing. |
+| `CHOWKIDAAR_DATA_DIR` | Stores clones, graph data, audit logs, and keys. Defaults to `~/.chowkidaar`. |
+| `CHOWKIDAAR_OPENAI_MODEL` | Model used for generated fixes. |
+| `CHOWKIDAAR_AUDIT_SECONDS` | Audit interval for traffic pressure. |
 
-See `backend/.env.example` for the rest.
+See [backend/.env.example](backend/.env.example) for the full list.
 
-## Try it without a real project
+## Project Structure
 
-A demo API provider and a demo customer app are included.
-
-```bash
-# the demo provider (Acme Orders API, v1 with a switch to v2)
-uv run --project backend uvicorn main:app --app-dir demo/provider --port 4010
-(cd demo/customer-app && npm install)      # once
-
-./demo/run_demo.sh            # the provider ships v2 and announces it
-./demo/run_demo.sh poll       # it ships silently; Chowkidaar notices on its own
-./demo/run_env_demo.sh        # an env credential changes provider: sense → ask → confirm → migrate
+```text
+backend/    FastAPI service, agents, graphing, audits, GitHub PR logic
+frontend/   React UI for graph viewing, simulations, and pipeline runs
+demo/       Mock provider and sample customer app
 ```
 
-The v2 release renames `name → customer_name` and `price → amount`, and moves `/v1/orders → /v2/orders`.
-The shape diff sees two renames. Only the migration guide says `amount` is integer cents, not dollars.
-A rename-only patch prints `$1999.00` instead of `$19.99`, fails the app's tests against the live API,
-and is never shipped.
+Important backend modules:
 
-In the UI, the Monitoring panel has one **Play** button for the simulation: normal load, a prediction of every
-call site at peak (queueing model), then the peak itself along the project's real call graph. Below it the agent
-shows predicted against measured load, p95, failures and a 0-100 score per node and for the pipeline (arithmetic on
-the measurements, never the model's opinion), what holds, what is weak, and a recommended change with simulated
-before/after numbers. While traffic flows, call sites past half their budget get
-a dashed "add a node here" proposal drawn on the graph. Nothing is changed until you press Apply.
-
-## Traffic from a real service
-
-`GET /api/v1/chowkidaar-traffic.ts` is a small reporter for TypeScript services (Cloudflare Workers,
-Node, Bun, Deno). It wraps the functions you name, records how long each call took and whether it
-threw, and posts batches to `POST /api/v1/traffic`. It never reads arguments or return values.
-Reported traffic replaces simulated traffic; the two are never mixed, and the UI always says which one
-it is showing.
-
-## Repository layout
-
-```
-backend/     FastAPI service: sensing, graph, agents, pipelines, GitHub, audits   (backend/README.md)
-frontend/    React + canvas UI: the pipeline graph, runs, reviews, prompts         (frontend/README.md)
-demo/        provider/      mock Acme Orders API (v1 → v2)
-             customer-app/  a small TypeScript app that depends on it (plain files;
-                            its git repository is created on demand under ~/.chowkidaar)
-```
-
-| Backend module | Role |
+| Module | Role |
 |---|---|
-| `scanner.py`, `graph.py` | API call sites (ast-grep); Graphify code graph, sliced to the pipeline |
-| `schema/`, `poller.py` | Response-shape inference, hashing, diff, rename candidates; drift probes |
-| `envwatch.py`, `workspace.py` | Environment sensing with fingerprints; workspace and API keys |
-| `traffic.py`, `audit.py`, `simrun.py` | Traffic store and simulator (M/M/c); silent audits; one-button simulation |
-| `pipeline.py`, `perf.py`, `repair.py` | Migration runs; pressure reviews; the model's patch |
-| `prs.py`, `gitops.py` | PR lifecycle (review rounds, merge verification); git and GitHub |
-| `agents.py`, `explain.py`, `notify.py` | Per-repo agents with private memory; explanations; notifications |
-| `db.py`, `llm.py` | Postgres/SQLite with an in-memory mirror and write-behind; OpenAI first, Anthropic fallback |
+| `scanner.py`, `graph.py` | Find API call sites and build the dependency graph. |
+| `schema/`, `poller.py` | Infer response shapes and detect contract drift. |
+| `envwatch.py`, `workspace.py` | Handle environment sensing and workspace keys. |
+| `traffic.py`, `audit.py`, `simrun.py` | Model traffic, run audits, and produce simulation reports. |
+| `pipeline.py`, `perf.py`, `repair.py` | Run migration and pressure-fix workflows. |
+| `prs.py`, `gitops.py` | Manage branches, pull requests, review comments, and merge checks. |
 
 ## Tests
 
 ```bash
-cd backend && uv run pytest          # 35 tests; the end-to-end ones need the demo provider on :4010
-CHOWKIDAAR_TEST_PG=postgresql://user@localhost:5432/test uv run pytest   # same suite on Postgres
+cd backend
+uv run pytest
 ```
 
-The test session strips real credentials before anything runs: tests never reach your database, your
-LLM key or your GitHub account.
+Frontend type check:
 
-## Status and limits
+```bash
+cd frontend
+npx tsc --noEmit
+```
 
-Built at a hackathon. What has been exercised for real: connecting a production-style repository
-(Cloudflare Workers + Next.js, four providers), the pipeline graph and AI explanations, environment
-sensing, the pressure review, and pull requests opened on GitHub with the project's typecheck and
-build passing. What has only run against a stubbed GitHub in tests: acting on review comments and
-verifying a merge. Traffic in the pressure demo was simulated along the repository's real call graph;
-the predicted gains are model output until re-measured on live traffic. The storage layer assumes one
-backend process per database. Contract probes are GET-only and exist for a few providers; others are
-watched through environment changes and release webhooks.
+## Safety Principles
+
+- Secrets are never stored as raw values.
+- The agent sees only the files in the affected API path.
+- Existing project checks are the gate before PR creation.
+- Failed baseline checks are reported instead of hidden.
+- Chowkidaar opens PRs but never merges them.
+
+## Current Status
+
+This project was built for a hackathon. The core flows are implemented: repo connection, graph mapping, simulation, audit, focused repair flow, validation, and PR-ready UI. Real GitHub PR creation requires a configured GitHub token and a connected remote repository.
 
 ## Credits
 
-The schema inference, hashing and diff in `backend/app/schema/` are a Python port of
-[`@schema-watch/core`](https://github.com/HenryMorganDibie/schema-watch) (Apache-2.0); the
-rename-candidate heuristic is inspired by
-[api-schema-differentiator](https://github.com/77QAlab/api-schema-differentiator) (MIT). The code graph
-is built with [Graphify](https://github.com/Graphify-Labs/graphify) (Apache-2.0) and call sites are
-found with [ast-grep](https://github.com/ast-grep/ast-grep) (MIT). See `backend/NOTICE`.
+The schema inference and diffing in `backend/app/schema/` are based on ideas from [`@schema-watch/core`](https://github.com/HenryMorganDibie/schema-watch) and `api-schema-differentiator`. The graph pipeline uses Graphify and ast-grep. See [backend/NOTICE](backend/NOTICE).

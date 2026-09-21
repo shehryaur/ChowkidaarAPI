@@ -50,6 +50,13 @@ def parse_full_name(remote_url: str | None) -> str | None:
     return match.group(1) if match else None
 
 
+def normalize_full_name(value: str | None) -> str | None:
+    value = (value or "").strip()
+    if not value:
+        return None
+    return parse_full_name(value) or value.removesuffix(".git")
+
+
 def describe_repo(path: Path) -> dict[str, Any]:
     remote = git(path, "remote", "get-url", "origin", check=False) or None
     branch = git(path, "rev-parse", "--abbrev-ref", "HEAD", check=False) or "main"

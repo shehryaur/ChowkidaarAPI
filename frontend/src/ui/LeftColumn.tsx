@@ -94,6 +94,7 @@ function GraphLegend() {
  *  One or two lines each; the tooltip gives the exact rule. */
 function Reading() {
   const graph = useStore((s) => s.graph);
+  const nodeStatus = useStore((s) => s.nodeStatus);
   const stats = useMemo(() => {
     const community = new Map(graph.nodes.map((n) => [n.id, n.community]));
     const degree = new Map<string, number>();
@@ -109,27 +110,30 @@ function Reading() {
     const hub = graph.nodes.filter((n) => n.kind !== "provider").sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0))[0];
     return { contains, api, same, cross, hub: hub ? { label: hub.label.split("/").pop()!, links: degree.get(hub.id) ?? 0 } : null };
   }, [graph]);
+  const hasProvider = graph.nodes.some((n) => n.kind === "provider");
+  const hasStatuses = [...nodeStatus.values()].some((s) => s !== "healthy");
+  const communities = new Set(graph.nodes.map((n) => n.community)).size;
 
-  const rows: { mark: React.ReactNode; term: string; text: React.ReactNode; rule: string }[] = [
+  const rows: ({ show?: boolean; mark: React.ReactNode; term: string; text: React.ReactNode; rule: string })[] = [
     { mark: <span className="hex mint" />, term: "Hexagon", text: "external API. Dots: files and functions.",
-      rule: "Hexagon = a provider node. Round nodes are files (larger) and the functions, classes and types declared in them (smaller)." },
+      rule: "Hexagon = a provider node. Round nodes are files (larger) and the functions, classes and types declared in them (smaller).", show: hasProvider },
     { mark: <span className="dot" style={{ "--c": "#8b978f", width: 11, height: 11 } as React.CSSProperties} />, term: "Size",
       text: <>links on the node, max 9.{stats.hub && <> Top: <code>{stats.hub.label}</code> <b className="n">{stats.hub.links}</b></>}</>,
       rule: "Radius = base + 0.38 px per link, for the first 9 links. Base: file 5 px, test 4.2 px, function or type 3.6 px. Hexagons are fixed at 12 px." },
     { mark: <i className="len short" />, term: "Short", text: <><code>contains</code> file → its function or type <b className="n">{stats.contains}</b></>,
-      rule: "contains links have a target length of 24 px and the strongest pull (0.9), so a file and everything it declares form one tight clump." },
+      rule: "contains links have a target length of 24 px and the strongest pull (0.9), so a file and everything it declares form one tight clump.", show: stats.contains > 0 },
     { mark: <i className="len mid" />, term: "Medium", text: <><code>calls</code> <code>imports</code> in one community <b className="n">{stats.same}</b></>,
-      rule: "calls, imports_from and other code links have a target length of 44 px. Inside one community the pull is 0.35, so they hold that length." },
+      rule: "calls, imports_from and other code links have a target length of 44 px. Inside one community the pull is 0.35, so they hold that length.", show: stats.same > 0 },
     { mark: <i className="len long" />, term: "Long", text: <><code>calls_api</code> <b className="n">{stats.api}</b> · between two communities <b className="n">{stats.cross}</b></>,
-      rule: "calls_api links have a target length of 96 px and hexagons sit outside the code. A link between two communities has a pull of only 0.05, so it stretches as far as the communities are apart. Its length is not a measurement of anything in the code." },
+      rule: "calls_api links have a target length of 96 px and hexagons sit outside the code. A link between two communities has a pull of only 0.05, so it stretches as far as the communities are apart. Its length is not a measurement of anything in the code.", show: stats.api + stats.cross > 0 },
     { mark: <span className="dot" style={{ "--c": "var(--blue)" } as React.CSSProperties} />, term: "Colour", text: "community: tightly linked code.",
-      rule: "Colour = Graphify community (Leiden clustering of the code graph), named after the directory most of its nodes live in." },
+      rule: "Colour = Graphify community (Leiden clustering of the code graph), named after the directory most of its nodes live in.", show: communities > 1 },
     { mark: <span className="dot" style={{ "--c": "var(--coral)" } as React.CSSProperties} />, term: "Red / amber", text: "changed API and its callers / what depends on them.",
-      rule: "Set by the backend per node while an issue is open. Red = the provider and its call sites (0 hops). Amber = everything downstream of them. Green = patched." },
+      rule: "Set by the backend per node while an issue is open. Red = the provider and its call sites (0 hops). Amber = everything downstream of them. Green = patched.", show: hasStatuses },
   ];
   return (
     <dl className="reading">
-      {rows.map((r) => (
+      {rows.filter((r) => r.show !== false).map((r) => (
         <div key={r.term} title={r.rule}>
           <dt>{r.mark}</dt>
           <dd><b>{r.term}</b>{r.text}</dd>

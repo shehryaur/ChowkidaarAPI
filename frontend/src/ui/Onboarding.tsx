@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "../data/api";
 import { refresh } from "../data/source";
 import { useStore } from "../lib/store";
@@ -69,24 +69,61 @@ function Copy({ text, label }: { text: string; label: string }) {
 
 function ConnectProject({ apiKey, first }: { apiKey: string | null; first: boolean }) {
   const workspace = useStore((s) => s.workspace)!;
-  const [target, setTarget] = useState("");
-  const [busy, setBusy] = useState<"rotate" | "connect" | null>(null);
+  const [mode, setMode] = useState<"github" | "local">("github");
+  const [githubRepo, setGithubRepo] = useState("");
+  const [localPath, setLocalPath] = useState("");
+  const [busy, setBusy] = useState<"rotate" | "connect" | "pick" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const folderInput = useRef<HTMLInputElement>(null);
   const command = (workspace.connect_command ?? "").replace("<your API key>", apiKey ?? "<your API key>");
+  const target = mode === "github" ? githubRepo : localPath;
 
   const rotate = () => {
     setBusy("rotate");
     api.rotateKey().then((w) => useStore.getState().setApiKey(w.api_key ?? null)).catch((e: Error) => setError(e.message)).finally(() => setBusy(null));
   };
-  const connect = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!target.trim()) return;
+  const connectTarget = (nextTarget = target) => {
+    if (!nextTarget.trim()) return;
     setBusy("connect");
     setError(null);
-    api.connectRepo(target.trim())
+    api.connectRepo(nextTarget.trim(), mode)
       .then((repo) => { useStore.getState().setAddingProject(false); useStore.getState().openProject(repo.id); return refresh(); })
       .catch((err: Error) => setError(err.message))
       .finally(() => setBusy(null));
+  };
+  const connect = (e: React.FormEvent) => {
+    e.preventDefault();
+    connectTarget();
+  };
+  const pickLocalRepo = () => {
+    setError(null);
+    folderInput.current?.click();
+  };
+  const pickedLocalRepo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] as (File & { path?: string; webkitRelativePath?: string }) | undefined;
+    if (!file) return;
+    const relative = file.webkitRelativePath || file.name;
+    const rootName = relative.split("/")[0] || "that folder";
+    if (file.path) {
+      const normalizedRelative = relative.replace(/\//g, "\\");
+      const path = file.path.endsWith(normalizedRelative)
+        ? file.path.slice(0, -normalizedRelative.length).replace(/[\\/]$/, "")
+        : file.path;
+      setLocalPath(path);
+      setError(null);
+      connectTarget(path);
+    } else {
+      setBusy("pick");
+      api.resolveLocalFolder(rootName)
+        .then(({ path }) => {
+          setLocalPath(path);
+          setError(null);
+          connectTarget(path);
+        })
+        .catch((err: Error) => setError(err.message))
+        .finally(() => setBusy(null));
+    }
+    e.target.value = "";
   };
 
   return (
@@ -103,22 +140,71 @@ function ConnectProject({ apiKey, first }: { apiKey: string | null; first: boole
         <p className="note">Your key <code className="mono">{workspace.key_prefix}</code> was shown once and is not stored. <button className="link" onClick={rotate} disabled={!!busy}>{busy === "rotate" ? "Rotating…" : "Rotate it"}</button> to get a new one.</p>
       )}
 
-      <section className="group">
-        <h3>Run this inside the project</h3>
-        <pre className="command mono">{command}</pre>
-        <Copy text={command} label="Copy command" />
-        <p className="hint">
-          It reports the repository and its credential-like environment variables. Values never leave your machine: each is reduced there to a keyed hash, and only that fingerprint is sent. <code className="mono">--watch</code> keeps reporting env changes.
-        </p>
-      </section>
-
-      <p className="waiting mono"><Spinner /> waiting for a project to connect</p>
-
       <form className="group" onSubmit={connect}>
-        <h3>Or point Chowkidaar at it</h3>
-        <div className="inline">
-          <input className="mono" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="owner/repo   or   /path/to/checkout" spellCheck={false} />
-          <button className="btn" disabled={!target.trim() || !!busy}>{busy === "connect" ? <Spinner /> : <Icon.arrow />} Connect</button>
+        <h3>Connect a repository</h3>
+        <div className="connect-switch" role="tablist" aria-label="Repository source">
+          <button type="button" role="tab" aria-selected={mode === "github"} className={mode === "github" ? "is-on" : ""} onClick={() => { setMode("github"); setError(null); }}>
+            <Icon.branch /> GitHub repo
+          </button>
+          <button type="button" role="tab" aria-selected={mode === "local"} className={mode === "local" ? "is-on" : ""} onClick={() => { setMode("local"); setError(null); }}>
+            <Icon.layers /> Local folder
+          </button>
+        </div>
+
+        {mode === "github" ? (
+          <div className="connect-box">
+            <label className="field">
+              <span className="eyebrow muted">GitHub repository</span>
+              <input
+                className="mono"
+                value={githubRepo}
+                onChange={(e) => setGithubRepo(e.target.value)}
+                placeholder="your github repository link"
+                spellCheck={false}
+              />
+            </label>
+            <p className="hint">Chowkidaar clones the repo into its workspace and maps the API pipelines from that copy.</p>
+          </div>
+        ) : (
+          <div className="connect-box">
+            <label className="field">
+              <span className="eyebrow muted">Local repository path</span>
+              <div className="path-picker">
+                <input
+                  ref={folderInput}
+                  className="sr-only"
+                  type="file"
+                  onChange={pickedLocalRepo}
+                  {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+                />
+                <input
+                  className="mono"
+                  value={localPath}
+                  onChange={(e) => setLocalPath(e.target.value)}
+                  placeholder="Select your local repo folder"
+                  spellCheck={false}
+                />
+                <button type="button" className="btn" onClick={pickLocalRepo} disabled={!!busy}>
+                  {busy === "pick" ? <Spinner /> : <Icon.layers />} Select folder
+                </button>
+              </div>
+            </label>
+            <p className="hint">Use this when the code is already on the same machine as the backend. The folder must be a Git checkout.</p>
+          </div>
+        )}
+
+        <button className="cta cta-mint" disabled={!target.trim() || !!busy}>
+          <span>{mode === "github" ? "Connect GitHub repo" : "Connect local repo"}<small>{mode === "github" ? "Accepts owner/repo or a github.com URL" : "Scans the checkout from this computer"}</small></span>
+          {busy === "connect" ? <Spinner /> : <Icon.arrow />}
+        </button>
+
+        <div className="manual-connect">
+          <div>
+            <h3>Need live env watching?</h3>
+            <p className="hint">Run the connector inside the project when you want credential fingerprints and env changes to keep reporting.</p>
+          </div>
+          <pre className="command mono">{command}</pre>
+          <Copy text={command} label="Copy command" />
         </div>
       </form>
       {error && <p className="error">{error}</p>}
